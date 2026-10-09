@@ -15,7 +15,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { PiggyBank } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { toasts, removeToast, stats, isLoading } = useApp();
+  const { toasts, removeToast, stats, isLoading, activeChallenge } = useApp();
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
   const [isCreatingGoal, setIsCreatingGoal] = useState<boolean>(false);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState<boolean>(false);
@@ -91,12 +91,13 @@ const AppContent: React.FC = () => {
             onOpenManual={handleOpenManual}
           />
         ) : currentTab === 'plan' ? (
-          <PlanView />
+          <PlanView onOpenManual={() => handleOpenManual(activeChallenge?.id)} />
         ) : currentTab === 'challenges' ? (
           <ChallengeListView
             onOpenCreate={handleOpenCreate}
             onSelectChallenge={() => setCurrentTab('dashboard')}
             onOpenSplit={() => handleOpenSplit(undefined)}
+            onOpenManual={handleOpenManual}
           />
         ) : currentTab === 'history' ? (
           <HistoryView />

@@ -19,12 +19,14 @@ interface ChallengeListViewProps {
   onOpenCreate: () => void;
   onSelectChallenge: (challenge: SavingsChallenge) => void;
   onOpenSplit?: () => void;
+  onOpenManual?: (goalId?: string) => void;
 }
 
 export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
   onOpenCreate,
   onSelectChallenge,
   onOpenSplit,
+  onOpenManual,
 }) => {
   const {
     challenges,
@@ -250,6 +252,18 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
                     </span>
                     <span>Range: {formatCurrency(ch.minimumAmount, ch.currency)} – {formatCurrency(ch.maximumAmount, ch.currency)}</span>
                   </div>
+
+                  {onOpenManual && ch.status !== 'archived' && (
+                    <div className="pt-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => onOpenManual(ch.id)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
+                      >
+                        + Add Manual Amount
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

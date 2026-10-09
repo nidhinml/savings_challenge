@@ -15,7 +15,11 @@ import {
 } from 'lucide-react';
 import type { SavingsEntry } from '../../types/challenge';
 
-export const PlanView: React.FC = () => {
+interface PlanViewProps {
+  onOpenManual?: () => void;
+}
+
+export const PlanView: React.FC<PlanViewProps> = ({ onOpenManual }) => {
   const {
     activeChallenge,
     activeChallengeEntries,
@@ -106,16 +110,28 @@ export const PlanView: React.FC = () => {
           </p>
         </div>
 
-        {/* Regenerate Plan Action */}
-        {!isSurpriseMode && (
-          <button
-            onClick={() => setShowRegenModal(true)}
-            className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Regenerate Plan</span>
-          </button>
-        )}
+        {/* Header Actions */}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {onOpenManual && (
+            <button
+              onClick={onOpenManual}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-950/40 border border-brand-200/60 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors shadow-sm"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+              <span>+ Manual Save</span>
+            </button>
+          )}
+
+          {!isSurpriseMode && (
+            <button
+              onClick={() => setShowRegenModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Regenerate Plan</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter and Search Bar */}

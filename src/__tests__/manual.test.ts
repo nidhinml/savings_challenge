@@ -118,4 +118,48 @@ describe('Manual Savings Deposit & All-in-One Dashboard Calculations', () => {
     expect(summary.activeCount).toBe(1);
     expect(summary.completedCount).toBe(1);
   });
+
+  it('handles input string parsing, presets, and quick increments correctly', () => {
+    // Initial amount string
+    let amountStr = '500';
+    expect(parseInt(amountStr, 10)).toBe(500);
+
+    // Editing: user clears input and types custom amount
+    amountStr = '';
+    expect(parseInt(amountStr, 10) || 0).toBe(0);
+
+    amountStr = '2500';
+    expect(parseInt(amountStr, 10)).toBe(2500);
+
+    // Quick preset direct set
+    const preset = 1000;
+    amountStr = String(preset);
+    expect(parseInt(amountStr, 10)).toBe(1000);
+
+    // Quick increment addition (+500)
+    const inc = 500;
+    amountStr = String((parseInt(amountStr, 10) || 0) + inc);
+    expect(parseInt(amountStr, 10)).toBe(1500);
+
+    // Cleans non-numeric inputs
+    const rawPasted = '₹ 3,500'.replace(/[^0-9]/g, '');
+    expect(rawPasted).toBe('3500');
+    expect(parseInt(rawPasted, 10)).toBe(3500);
+  });
+
+  it('validates manual deposit requirements before saving', () => {
+    const validate = (goalId: string, amountStr: string) => {
+      const parsed = parseInt(amountStr, 10);
+      if (!goalId) return { valid: false, error: 'Please select a target goal.' };
+      if (isNaN(parsed) || parsed <= 0) return { valid: false, error: 'Please enter a valid amount.' };
+      return { valid: true, amount: parsed };
+    };
+
+    expect(validate('', '500').valid).toBe(false);
+    expect(validate('goal_1', '').valid).toBe(false);
+    expect(validate('goal_1', '0').valid).toBe(false);
+    expect(validate('goal_1', '-50').valid).toBe(false);
+    expect(validate('goal_1', '750').valid).toBe(true);
+    expect(validate('goal_1', '750').amount).toBe(750);
+  });
 });

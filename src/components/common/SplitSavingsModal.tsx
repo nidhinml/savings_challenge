@@ -145,6 +145,7 @@ export const SplitSavingsModal: React.FC<SplitSavingsModalProps> = ({
       onClose={onClose}
       title="Split Savings Across Goals"
       description="Divide today's deposit between multiple active targets."
+      hideFooter={true}
     >
       <div className="space-y-4 max-h-[75vh] overflow-y-auto px-1">
         {/* Total Input */}
