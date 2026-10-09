@@ -12,16 +12,19 @@ import {
   Archive,
   Trash2,
   Layers,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface ChallengeListViewProps {
   onOpenCreate: () => void;
   onSelectChallenge: (challenge: SavingsChallenge) => void;
+  onOpenSplit?: () => void;
 }
 
 export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
   onOpenCreate,
   onSelectChallenge,
+  onOpenSplit,
 }) => {
   const {
     challenges,
@@ -100,13 +103,27 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenCreate}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md shadow-brand-600/25 active:scale-95 transition-all"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>New Goal</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenSplit && challenges.length > 1 && (
+            <button
+              type="button"
+              onClick={onOpenSplit}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active:scale-95 transition-all"
+              title="Split an amount across multiple goals"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 text-brand-500" />
+              <span>Split Save</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenCreate}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md shadow-brand-600/25 active:scale-95 transition-all"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>New Goal</span>
+          </button>
+        </div>
       </div>
 
       {/* Challenges List */}

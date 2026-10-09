@@ -26,12 +26,19 @@
   - Circular progress ring and dynamic gradient progress bar.
   - Total saved, remaining target, percentage completion, streak counter, and daily average.
   - History view with status filters (All, Completed, Pending, Missed) and timestamp audits.
+- **🔀 Multi-Goal Split Savings (NEW)**:
+  - Split any daily savings amount or lump-sum deposit across multiple active goals simultaneously!
+  - Interactive distribution modes: **Equal Split** or **Proportional Split** (weighted by each goal's target).
+  - Fine-tune exact allocations with visual percentage sliders and real-time balance checker.
+  - Automatically credits and updates progress across each goal in IndexedDB.
+  - Dedicated Split History log with goal breakdowns, timestamps, and notes.
 - **📁 Multi-Challenge Support**:
   - Manage multiple concurrent challenges (e.g. *Emergency Fund*, *New Phone*, *Travel Fund*).
   - Switch active challenge, pause, resume, or archive. Each challenge maintains strictly isolated financial totals.
-- **🌐 Offline-Ready PWA**:
+- **🌐 Offline-Ready PWA & Free Tier Hosting**:
   - Service Worker offline caching via `vite-plugin-pwa`.
   - 100% client-side persistent storage with IndexedDB (`idb`).
+  - Pre-configured for **100% Free Hosting** on Vercel, Netlify, and Cloudflare Pages (see [DEPLOYMENT.md](./DEPLOYMENT.md)).
   - Mobile install prompt banner (`beforeinstallprompt` support).
   - Synthesized Web Audio API chimes (zero external audio dependencies).
 - **🎨 Customization & Accessibility**:

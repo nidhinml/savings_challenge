@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { AppSettings, SavingsChallenge, SavingsEntry, AppBackupData } from '../types/challenge';
+import type { AppSettings, SavingsChallenge, SavingsEntry, AppBackupData, SplitTransaction } from '../types/challenge';
 
 interface SaveSmartDB extends DBSchema {
   challenges: {
@@ -20,6 +20,14 @@ interface SaveSmartDB extends DBSchema {
       'by-date': string;
     };
   };
+  split_transactions: {
+    key: string;
+    value: SplitTransaction;
+    indexes: {
+      'by-date': string;
+      'by-timestamp': string;
+    };
+  };
   settings: {
     key: string;
     value: any;
@@ -27,7 +35,7 @@ interface SaveSmartDB extends DBSchema {
 }
 
 const DB_NAME = 'savesmart_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   displayName: 'SaveSmart User',
@@ -66,6 +74,14 @@ export function getDatabase(): Promise<IDBPDatabase<SaveSmartDB>> {
 
           // Settings Store
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains('split_transactions')) {
+            const splitStore = db.createObjectStore('split_transactions', { keyPath: 'id' });
+            splitStore.createIndex('by-date', 'date');
+            splitStore.createIndex('by-timestamp', 'timestamp');
+          }
         }
       },
     });
@@ -144,6 +160,24 @@ export async function deleteEntriesForChallenge(challengeId: string): Promise<vo
   await tx.done;
 }
 
+// ---------------- SPLIT TRANSACTIONS REPOSITORY ---------------- //
+
+export async function getAllSplitTransactions(): Promise<SplitTransaction[]> {
+  const db = await getDatabase();
+  const list = await db.getAll('split_transactions');
+  return list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
+
+export async function saveSplitTransaction(txRecord: SplitTransaction): Promise<void> {
+  const db = await getDatabase();
+  await db.put('split_transactions', txRecord);
+}
+
+export async function deleteSplitTransaction(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.delete('split_transactions', id);
+}
+
 // ---------------- SETTINGS REPOSITORY ---------------- //
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -168,10 +202,11 @@ export async function saveAppSettings(settings: AppSettings): Promise<void> {
 
 export async function exportAllData(): Promise<AppBackupData> {
   const db = await getDatabase();
-  const [challenges, entries, settings] = await Promise.all([
+  const [challenges, entries, settings, splitTransactions] = await Promise.all([
     db.getAll('challenges'),
     db.getAll('entries'),
     getAppSettings(),
+    db.getAll('split_transactions'),
   ]);
 
   return {
@@ -180,6 +215,7 @@ export async function exportAllData(): Promise<AppBackupData> {
     settings,
     challenges,
     entries,
+    splitTransactions,
   };
 }
 
@@ -189,11 +225,13 @@ export async function importAllData(backup: AppBackupData): Promise<void> {
   }
 
   const db = await getDatabase();
-  const tx = db.transaction(['challenges', 'entries', 'settings'], 'readwrite');
+  const tx = db.transaction(['challenges', 'entries', 'settings', 'split_transactions'], 'readwrite');
 
   // Clear existing
   await tx.objectStore('challenges').clear();
   await tx.objectStore('entries').clear();
+  await tx.objectStore('settings').clear();
+  await tx.objectStore('split_transactions').clear();
 
   // Import challenges
   for (const c of backup.challenges) {
@@ -203,6 +241,13 @@ export async function importAllData(backup: AppBackupData): Promise<void> {
   // Import entries
   for (const e of backup.entries) {
     await tx.objectStore('entries').put(e);
+  }
+
+  // Import split transactions
+  if (backup.splitTransactions) {
+    for (const s of backup.splitTransactions) {
+      await tx.objectStore('split_transactions').put(s);
+    }
   }
 
   // Import settings
@@ -215,9 +260,10 @@ export async function importAllData(backup: AppBackupData): Promise<void> {
 
 export async function resetAllData(): Promise<void> {
   const db = await getDatabase();
-  const tx = db.transaction(['challenges', 'entries', 'settings'], 'readwrite');
+  const tx = db.transaction(['challenges', 'entries', 'settings', 'split_transactions'], 'readwrite');
   await tx.objectStore('challenges').clear();
   await tx.objectStore('entries').clear();
   await tx.objectStore('settings').clear();
+  await tx.objectStore('split_transactions').clear();
   await tx.done;
 }

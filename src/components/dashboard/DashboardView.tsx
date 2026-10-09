@@ -16,15 +16,21 @@ import {
   RefreshCw,
   Trophy,
   CalendarDays,
+  ArrowRightLeft,
 } from 'lucide-react';
 import type { TabType } from '../common/BottomNav';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: TabType) => void;
   onOpenCreate: () => void;
+  onOpenSplit?: (amount?: number) => void;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onOpenCreate }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({
+  onNavigateTab,
+  onOpenCreate,
+  onOpenSplit,
+}) => {
   const {
     settings,
     activeChallenge,
@@ -263,14 +269,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onO
               </p>
             </div>
 
-            <button
-              onClick={handleQuickSave}
-              disabled={isSaving}
-              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-base flex items-center justify-center gap-2 shadow-lg shadow-brand-600/30 active:scale-95 transition-all"
-            >
-              <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
-              <span>{isSaving ? 'Recording...' : 'Mark as Saved'}</span>
-            </button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <button
+                onClick={handleQuickSave}
+                disabled={isSaving}
+                className="px-6 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-brand-600/30 active:scale-95 transition-all"
+              >
+                <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
+                <span>{isSaving ? 'Recording...' : 'Mark as Saved'}</span>
+              </button>
+
+              {onOpenSplit && (
+                <button
+                  type="button"
+                  onClick={() => onOpenSplit(nextEntry.amount)}
+                  className="px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-slate-200/80 dark:border-slate-700/80"
+                  title="Split this amount across different goals"
+                >
+                  <ArrowRightLeft className="w-4 h-4 text-brand-500" />
+                  <span>Split Goals</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ) : activeChallenge.generationMode === 'daily_surprise' ? (

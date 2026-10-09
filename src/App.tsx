@@ -4,6 +4,7 @@ import { Navbar } from './components/common/Navbar';
 import { BottomNav, type TabType } from './components/common/BottomNav';
 import { ToastContainer } from './components/common/Toast';
 import { PWAInstallBanner } from './components/common/PWAInstallBanner';
+import { SplitSavingsModal } from './components/common/SplitSavingsModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { PlanView } from './components/plan/PlanView';
 import { CreateChallengeView } from './components/create/CreateChallengeView';
@@ -16,6 +17,8 @@ const AppContent: React.FC = () => {
   const { toasts, removeToast, stats, isLoading } = useApp();
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
   const [isCreatingGoal, setIsCreatingGoal] = useState<boolean>(false);
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState<boolean>(false);
+  const [splitInitialAmount, setSplitInitialAmount] = useState<number | undefined>(undefined);
 
   if (isLoading) {
     return (
@@ -40,6 +43,11 @@ const AppContent: React.FC = () => {
   const handleCreateSuccess = () => {
     setIsCreatingGoal(false);
     setCurrentTab('dashboard');
+  };
+
+  const handleOpenSplit = (amount?: number) => {
+    setSplitInitialAmount(amount);
+    setIsSplitModalOpen(true);
   };
 
   return (
@@ -71,6 +79,7 @@ const AppContent: React.FC = () => {
           <DashboardView
             onNavigateTab={(tab) => setCurrentTab(tab)}
             onOpenCreate={handleOpenCreate}
+            onOpenSplit={handleOpenSplit}
           />
         ) : currentTab === 'plan' ? (
           <PlanView />
@@ -78,6 +87,7 @@ const AppContent: React.FC = () => {
           <ChallengeListView
             onOpenCreate={handleOpenCreate}
             onSelectChallenge={() => setCurrentTab('dashboard')}
+            onOpenSplit={() => handleOpenSplit(undefined)}
           />
         ) : currentTab === 'history' ? (
           <HistoryView />
@@ -85,6 +95,13 @@ const AppContent: React.FC = () => {
           <SettingsView />
         ) : null}
       </main>
+
+      {/* Multi-Goal Split Savings Modal */}
+      <SplitSavingsModal
+        isOpen={isSplitModalOpen}
+        onClose={() => setIsSplitModalOpen(false)}
+        initialAmount={splitInitialAmount}
+      />
 
       {/* Mobile Bottom Navigation */}
       <BottomNav

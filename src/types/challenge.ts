@@ -39,6 +39,21 @@ export interface SavingsEntry {
   updatedAt: string;
 }
 
+export interface SplitAllocation {
+  challengeId: string;
+  challengeName: string;
+  amount: number;
+}
+
+export interface SplitTransaction {
+  id: string;
+  totalAmount: number;
+  allocations: SplitAllocation[];
+  date: string; // YYYY-MM-DD
+  timestamp: string; // ISO string
+  note?: string;
+}
+
 export interface AppSettings {
   displayName: string;
   currency: string;
@@ -85,4 +100,5 @@ export interface AppBackupData {
   settings: AppSettings;
   challenges: SavingsChallenge[];
   entries: SavingsEntry[];
+  splitTransactions?: SplitTransaction[];
 }
