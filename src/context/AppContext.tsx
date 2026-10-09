@@ -8,6 +8,7 @@ import type {
   GenerationMode,
   AppBackupData,
   SplitTransaction,
+  AllGoalsSummary,
 } from '../types/challenge';
 import * as db from '../lib/db';
 import { generateConstrainedPartition, generateNextSurpriseAmount } from '../lib/partition';
@@ -34,6 +35,14 @@ export interface CreateChallengeInput {
   notes?: string;
 }
 
+export interface ChallengeStatMapItem {
+  totalSaved: number;
+  progressPercentage: number;
+  remainingAmount: number;
+  totalEntries: number;
+  completedEntries: number;
+}
+
 interface AppContextType {
   settings: AppSettings;
   challenges: SavingsChallenge[];
@@ -41,6 +50,8 @@ interface AppContextType {
   activeChallengeEntries: SavingsEntry[];
   splitTransactions: SplitTransaction[];
   stats: ChallengeStats | null;
+  allGoalsSummary: AllGoalsSummary;
+  allChallengesStats: Record<string, ChallengeStatMapItem>;
   toasts: ToastMessage[];
   isLoading: boolean;
   isOnline: boolean;
@@ -58,6 +69,12 @@ interface AppContextType {
   regeneratePlan: (challengeId: string) => Promise<void>;
   generateNextSurpriseEntry: (challengeId: string) => Promise<SavingsEntry | null>;
   rerollSurpriseAmount: (entryId: string) => Promise<void>;
+  addManualSavings: (
+    challengeId: string,
+    amount: number,
+    date?: string,
+    note?: string
+  ) => Promise<void>;
   splitAmountAcrossChallenges: (
     totalAmount: number,
     allocations: { challengeId: string; amount: number }[],
@@ -69,6 +86,7 @@ interface AppContextType {
   importData: (backup: AppBackupData) => Promise<void>;
   resetData: () => Promise<void>;
   refreshActiveEntries: () => Promise<void>;
+  refreshAllStats: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -78,6 +96,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [challenges, setChallenges] = useState<SavingsChallenge[]>([]);
   const [activeChallengeId, setActiveChallengeIdState] = useState<string | null>(null);
   const [activeChallengeEntries, setActiveChallengeEntries] = useState<SavingsEntry[]>([]);
+  const [allChallengesStats, setAllChallengesStats] = useState<Record<string, ChallengeStatMapItem>>({});
   const [splitTransactions, setSplitTransactions] = useState<SplitTransaction[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -147,6 +166,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     root.setAttribute('data-accent', settings.accentColor || 'emerald');
   }, [settings.themeMode, settings.accentColor]);
 
+  // Helper to recompute statistics across all challenges
+  const refreshAllStatsFor = useCallback(async (challengeList: SavingsChallenge[]) => {
+    const map: Record<string, ChallengeStatMapItem> = {};
+    for (const c of challengeList) {
+      const entries = await db.getEntriesForChallenge(c.id);
+      const totalSaved = entries
+        .filter((e) => e.status === 'saved')
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      const progressPercentage =
+        c.targetAmount > 0
+          ? Math.min(100, Math.round((totalSaved / c.targetAmount) * 100))
+          : 0;
+
+      map[c.id] = {
+        totalSaved,
+        progressPercentage,
+        remainingAmount: Math.max(0, c.targetAmount - totalSaved),
+        totalEntries: entries.length,
+        completedEntries: entries.filter((e) => e.status === 'saved').length,
+      };
+    }
+    setAllChallengesStats(map);
+  }, []);
+
+  const refreshAllStats = useCallback(async () => {
+    await refreshAllStatsFor(challenges);
+  }, [challenges, refreshAllStatsFor]);
+
   // Initial load from IndexedDB
   const initApp = useCallback(async () => {
     try {
@@ -166,6 +214,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveChallengeIdState(active.id);
         const entries = await db.getEntriesForChallenge(active.id);
         setActiveChallengeEntries(entries);
+        await refreshAllStatsFor(savedChallenges);
       } else {
         const initialChallenge: SavingsChallenge = {
           id: 'demo-10k-challenge',
@@ -204,13 +253,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setChallenges([initialChallenge]);
         setActiveChallengeIdState(initialChallenge.id);
         setActiveChallengeEntries(entries);
+        await refreshAllStatsFor([initialChallenge]);
       }
     } catch (err) {
       console.error('Failed to initialize application from IDB:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [refreshAllStatsFor]);
 
   useEffect(() => {
     initApp();
@@ -237,6 +287,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeChallenge = useMemo(() => {
     return challenges.find((c) => c.id === activeChallengeId) || null;
   }, [challenges, activeChallengeId]);
+
+  // Aggregate grand summary across all goals
+  const allGoalsSummary: AllGoalsSummary = useMemo(() => {
+    const nonArchived = challenges.filter((c) => c.status !== 'archived');
+    const totalTarget = nonArchived.reduce((sum, c) => sum + c.targetAmount, 0);
+    const totalSaved = nonArchived.reduce((sum, c) => {
+      return sum + (allChallengesStats[c.id]?.totalSaved || 0);
+    }, 0);
+    const totalRemaining = Math.max(0, totalTarget - totalSaved);
+    const overallProgress =
+      totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+    const activeCount = challenges.filter((c) => c.status === 'active').length;
+    const completedCount = challenges.filter((c) => c.status === 'completed').length;
+
+    return {
+      totalTarget,
+      totalSaved,
+      totalRemaining,
+      overallProgress,
+      activeCount,
+      completedCount,
+      totalGoals: challenges.length,
+    };
+  }, [challenges, allChallengesStats]);
 
   // Compute stats for current active challenge
   const stats: ChallengeStats | null = useMemo(() => {
@@ -361,14 +435,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await db.saveChallenge(newChallenge);
       await db.saveEntriesBatch(entries);
 
-      setChallenges((prev) => [newChallenge, ...prev]);
+      const nextChallenges = [newChallenge, ...challenges];
+      setChallenges(nextChallenges);
       setActiveChallengeIdState(challengeId);
       setActiveChallengeEntries(entries);
+      await refreshAllStatsFor(nextChallenges);
 
       addToast(`Challenge "${newChallenge.name}" created!`, 'success');
       return newChallenge;
     },
-    [addToast]
+    [challenges, refreshAllStatsFor, addToast]
   );
 
   // Update Challenge
@@ -376,10 +452,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async (challenge: SavingsChallenge) => {
       const updated = { ...challenge, updatedAt: new Date().toISOString() };
       await db.saveChallenge(updated);
-      setChallenges((prev) => prev.map((c) => (c.id === challenge.id ? updated : c)));
+      const nextChallenges = challenges.map((c) => (c.id === challenge.id ? updated : c));
+      setChallenges(nextChallenges);
+      await refreshAllStatsFor(nextChallenges);
       addToast(`Challenge updated`, 'info');
     },
-    [addToast]
+    [challenges, refreshAllStatsFor, addToast]
   );
 
   // Delete Challenge
@@ -399,9 +477,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setActiveChallengeEntries([]);
         }
       }
+      await refreshAllStatsFor(remaining);
       addToast('Challenge deleted', 'info');
     },
-    [challenges, activeChallengeId, addToast]
+    [challenges, activeChallengeId, refreshAllStatsFor, addToast]
   );
 
   // Mark entry as saved
@@ -443,12 +522,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: new Date().toISOString(),
         };
         await db.saveChallenge(completedChallenge);
-        setChallenges((prev) => prev.map((c) => (c.id === activeChallenge.id ? completedChallenge : c)));
+        const nextChallenges = challenges.map((c) => (c.id === activeChallenge.id ? completedChallenge : c));
+        setChallenges(nextChallenges);
+        await refreshAllStatsFor(nextChallenges);
       } else {
         fireConfetti(settings.confettiEnabled);
+        await refreshAllStatsFor(challenges);
       }
     },
-    [activeChallengeEntries, activeChallenge, settings, addToast]
+    [activeChallengeEntries, activeChallenge, challenges, settings, refreshAllStatsFor, addToast]
   );
 
   // Undo saved entry
@@ -471,6 +553,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       playUndoTone(settings.soundEffects);
 
+      let nextChallenges = challenges;
       if (activeChallenge && activeChallenge.status === 'completed') {
         const reactivatedChallenge: SavingsChallenge = {
           ...activeChallenge,
@@ -478,12 +561,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: new Date().toISOString(),
         };
         await db.saveChallenge(reactivatedChallenge);
-        setChallenges((prev) => prev.map((c) => (c.id === activeChallenge.id ? reactivatedChallenge : c)));
+        nextChallenges = challenges.map((c) => (c.id === activeChallenge.id ? reactivatedChallenge : c));
+        setChallenges(nextChallenges);
       }
 
+      await refreshAllStatsFor(nextChallenges);
       addToast(`Day ${entry.sequenceNumber} completion reversed.`, 'info');
     },
-    [activeChallengeEntries, activeChallenge, settings.soundEffects, addToast]
+    [activeChallengeEntries, activeChallenge, challenges, settings.soundEffects, refreshAllStatsFor, addToast]
   );
 
   // Regenerate plan for challenge
@@ -519,9 +604,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveChallengeEntries(newEntries);
       }
 
+      await refreshAllStatsFor(challenges);
       addToast('New randomized savings plan generated!', 'success');
     },
-    [challenges, activeChallengeId, addToast]
+    [challenges, activeChallengeId, refreshAllStatsFor, addToast]
   );
 
   // Generate next surprise entry for Mode B
@@ -584,9 +670,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveChallengeEntries(updatedEntries);
       }
 
+      await refreshAllStatsFor(challenges);
       return newEntry;
     },
-    [challenges, activeChallengeId]
+    [challenges, activeChallengeId, refreshAllStatsFor]
   );
 
   // Re-roll surprise amount for pending entry
@@ -619,6 +706,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [activeChallengeEntries, activeChallenge, addToast]
   );
 
+  // ---------------- MANUAL SAVINGS DEPOSIT ---------------- //
+  const addManualSavings = useCallback(
+    async (challengeId: string, amount: number, date?: string, note?: string) => {
+      if (amount <= 0) return;
+
+      const targetChallenge = challenges.find((c) => c.id === challengeId);
+      if (!targetChallenge) return;
+
+      const nowIso = new Date().toISOString();
+      const plannedDate = date || getTodayDateString();
+      const entries = await db.getEntriesForChallenge(challengeId);
+
+      // Check if an exact pending entry exists for this amount
+      const matchingPending = entries.find((e) => e.status === 'pending' && e.amount === amount);
+
+      if (matchingPending) {
+        matchingPending.status = 'saved';
+        matchingPending.completedAt = nowIso;
+        matchingPending.updatedAt = nowIso;
+        if (note) matchingPending.note = note;
+        matchingPending.isManual = true;
+        await db.updateEntryRecord(matchingPending);
+      } else {
+        const nextSeq = entries.length + 1;
+        const manualEntry: SavingsEntry = {
+          id: `entry_${challengeId}_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          challengeId,
+          sequenceNumber: nextSeq,
+          plannedDate,
+          amount,
+          status: 'saved',
+          completedAt: nowIso,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          note,
+          isManual: true,
+        };
+        await db.saveEntriesBatch([manualEntry]);
+      }
+
+      const updatedEntries = await db.getEntriesForChallenge(challengeId);
+      const newTotalSaved = updatedEntries
+        .filter((e) => e.status === 'saved')
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      let nextChallenges = challenges;
+      if (newTotalSaved >= targetChallenge.targetAmount && targetChallenge.status !== 'completed') {
+        const completedCh = { ...targetChallenge, status: 'completed' as const, updatedAt: nowIso };
+        await db.saveChallenge(completedCh);
+        nextChallenges = challenges.map((c) => (c.id === challengeId ? completedCh : c));
+        setChallenges(nextChallenges);
+        fireGrandCelebration(settings.confettiEnabled);
+        addToast(`🎉 Goal "${targetChallenge.name}" completed!`, 'success');
+      } else {
+        fireConfetti(settings.confettiEnabled);
+      }
+
+      if (activeChallengeId === challengeId) {
+        setActiveChallengeEntries(updatedEntries);
+      }
+
+      await refreshAllStatsFor(nextChallenges);
+      playSuccessChime(settings.soundEffects);
+      addToast(
+        `${formatCurrency(amount, targetChallenge.currency)} saved to "${targetChallenge.name}"!`,
+        'success'
+      );
+    },
+    [challenges, activeChallengeId, settings, refreshAllStatsFor, addToast]
+  );
+
   // ---------------- MULTI-GOAL SPLIT SAVINGS ---------------- //
   const splitAmountAcrossChallenges = useCallback(
     async (
@@ -630,8 +788,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const nowIso = new Date().toISOString();
       const todayStr = getTodayDateString();
+      let nextChallenges = challenges;
 
-      // Process each allocation
       for (const alloc of allocations) {
         if (alloc.amount <= 0) continue;
 
@@ -646,16 +804,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (remainingAlloc <= 0) break;
 
           if (entry.amount <= remainingAlloc) {
-            // Mark entire pending entry as saved
             entry.status = 'saved';
             entry.completedAt = nowIso;
             entry.updatedAt = nowIso;
             await db.updateEntryRecord(entry);
             remainingAlloc -= entry.amount;
           } else {
-            // Partial split of pending entry:
-            // 1. Current entry marked saved with alloc portion
-            // 2. Remainder kept as pending entry
             const remainderAmount = entry.amount - remainingAlloc;
 
             const savedPortion: SavingsEntry = {
@@ -685,7 +839,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        // If amount remaining after all pending entries (or in surprise mode)
         if (remainingAlloc > 0) {
           const directEntry: SavingsEntry = {
             id: `entry_${alloc.challengeId}_split_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -701,7 +854,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await db.saveEntriesBatch([directEntry]);
         }
 
-        // Check if challenge is now 100% completed
         const updatedEntries = await db.getEntriesForChallenge(alloc.challengeId);
         const newTotalSaved = updatedEntries
           .filter((e) => e.status === 'saved')
@@ -710,11 +862,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (newTotalSaved >= targetChallenge.targetAmount && targetChallenge.status !== 'completed') {
           const completedCh = { ...targetChallenge, status: 'completed' as const, updatedAt: nowIso };
           await db.saveChallenge(completedCh);
-          setChallenges((prev) => prev.map((c) => (c.id === alloc.challengeId ? completedCh : c)));
+          nextChallenges = nextChallenges.map((c) => (c.id === alloc.challengeId ? completedCh : c));
         }
       }
 
-      // Record SplitTransaction
+      setChallenges(nextChallenges);
+
       const splitRecord: SplitTransaction = {
         id: 'split_' + Math.random().toString(36).substring(2, 11),
         totalAmount,
@@ -734,11 +887,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await db.saveSplitTransaction(splitRecord);
       setSplitTransactions((prev) => [splitRecord, ...prev]);
 
-      // Refresh active challenge entries if affected
       if (activeChallengeId) {
         const freshEntries = await db.getEntriesForChallenge(activeChallengeId);
         setActiveChallengeEntries(freshEntries);
       }
+
+      await refreshAllStatsFor(nextChallenges);
 
       playSuccessChime(settings.soundEffects);
       fireConfetti(settings.confettiEnabled);
@@ -747,7 +901,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'success'
       );
     },
-    [challenges, activeChallengeId, settings, addToast]
+    [challenges, activeChallengeId, settings, refreshAllStatsFor, addToast]
   );
 
   const deleteSplitTransaction = useCallback(
@@ -782,7 +936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       link.click();
       URL.revokeObjectURL(url);
       addToast('Data exported successfully', 'success');
-    } catch {
+    } catch (err) {
       addToast('Failed to export data', 'error');
     }
   }, [addToast]);
@@ -822,6 +976,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeChallengeEntries,
         splitTransactions,
         stats,
+        allGoalsSummary,
+        allChallengesStats,
         toasts,
         isLoading,
         isOnline,
@@ -839,6 +995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         regeneratePlan,
         generateNextSurpriseEntry,
         rerollSurpriseAmount,
+        addManualSavings,
         splitAmountAcrossChallenges,
         deleteSplitTransaction,
         updateSettings,
@@ -846,6 +1003,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         importData,
         resetData,
         refreshActiveEntries,
+        refreshAllStats,
       }}
     >
       {children}

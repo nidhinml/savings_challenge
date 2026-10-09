@@ -5,6 +5,7 @@ import { BottomNav, type TabType } from './components/common/BottomNav';
 import { ToastContainer } from './components/common/Toast';
 import { PWAInstallBanner } from './components/common/PWAInstallBanner';
 import { SplitSavingsModal } from './components/common/SplitSavingsModal';
+import { ManualDepositModal } from './components/common/ManualDepositModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { PlanView } from './components/plan/PlanView';
 import { CreateChallengeView } from './components/create/CreateChallengeView';
@@ -19,6 +20,8 @@ const AppContent: React.FC = () => {
   const [isCreatingGoal, setIsCreatingGoal] = useState<boolean>(false);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState<boolean>(false);
   const [splitInitialAmount, setSplitInitialAmount] = useState<number | undefined>(undefined);
+  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
+  const [manualGoalId, setManualGoalId] = useState<string | undefined>(undefined);
 
   if (isLoading) {
     return (
@@ -48,6 +51,11 @@ const AppContent: React.FC = () => {
   const handleOpenSplit = (amount?: number) => {
     setSplitInitialAmount(amount);
     setIsSplitModalOpen(true);
+  };
+
+  const handleOpenManual = (goalId?: string) => {
+    setManualGoalId(goalId);
+    setIsManualModalOpen(true);
   };
 
   return (
@@ -80,6 +88,7 @@ const AppContent: React.FC = () => {
             onNavigateTab={(tab) => setCurrentTab(tab)}
             onOpenCreate={handleOpenCreate}
             onOpenSplit={handleOpenSplit}
+            onOpenManual={handleOpenManual}
           />
         ) : currentTab === 'plan' ? (
           <PlanView />
@@ -101,6 +110,13 @@ const AppContent: React.FC = () => {
         isOpen={isSplitModalOpen}
         onClose={() => setIsSplitModalOpen(false)}
         initialAmount={splitInitialAmount}
+      />
+
+      {/* Manual Deposit Modal */}
+      <ManualDepositModal
+        isOpen={isManualModalOpen}
+        onClose={() => setIsManualModalOpen(false)}
+        defaultGoalId={manualGoalId}
       />
 
       {/* Mobile Bottom Navigation */}

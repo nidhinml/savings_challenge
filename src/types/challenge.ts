@@ -37,6 +37,18 @@ export interface SavingsEntry {
   completedAt: string | null; // ISO string when marked saved
   createdAt: string;
   updatedAt: string;
+  note?: string;
+  isManual?: boolean;
+}
+
+export interface AllGoalsSummary {
+  totalTarget: number;
+  totalSaved: number;
+  totalRemaining: number;
+  overallProgress: number;
+  activeCount: number;
+  completedCount: number;
+  totalGoals: number;
 }
 
 export interface SplitAllocation {
