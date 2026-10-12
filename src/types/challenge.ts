@@ -27,18 +27,22 @@ export interface SavingsChallenge {
   updatedAt: string; // ISO string
 }
 
+export type EntryType = 'deposit' | 'deduction';
+
 export interface SavingsEntry {
   id: string;
   challengeId: string;
   sequenceNumber: number; // 1, 2, 3...
   plannedDate: string; // YYYY-MM-DD
-  amount: number; // integer in currency units (e.g. ₹500)
+  amount: number; // integer in currency units (positive for deposit, negative for deduction)
   status: EntryStatus;
   completedAt: string | null; // ISO string when marked saved
   createdAt: string;
   updatedAt: string;
   note?: string;
   isManual?: boolean;
+  entryType?: EntryType;
+  reason?: string;
 }
 
 export interface AllGoalsSummary {

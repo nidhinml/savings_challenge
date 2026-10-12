@@ -162,4 +162,140 @@ describe('Manual Savings Deposit & All-in-One Dashboard Calculations', () => {
     expect(validate('goal_1', '750').valid).toBe(true);
     expect(validate('goal_1', '750').amount).toBe(750);
   });
+
+  it('records a deduction / lost money with negative amount, reason, and entryType', () => {
+    const entries: SavingsEntry[] = [
+      {
+        id: 'entry_1',
+        challengeId: 'ch1',
+        sequenceNumber: 1,
+        plannedDate: '2026-10-09',
+        amount: 2500,
+        status: 'saved',
+        completedAt: '2026-10-09T10:00:00Z',
+        createdAt: '2026-10-09T10:00:00Z',
+        updatedAt: '2026-10-09T10:00:00Z',
+        isManual: true,
+      },
+    ];
+
+    const deductAmount = 500;
+    const deductionEntry: SavingsEntry = {
+      id: 'entry_deduct_1',
+      challengeId: 'ch1',
+      sequenceNumber: 2,
+      plannedDate: '2026-10-09',
+      amount: -deductAmount,
+      status: 'saved',
+      completedAt: '2026-10-09T12:00:00Z',
+      createdAt: '2026-10-09T12:00:00Z',
+      updatedAt: '2026-10-09T12:00:00Z',
+      note: 'Lost wallet cash',
+      reason: 'Lost Money',
+      isManual: true,
+      entryType: 'deduction',
+    };
+
+    entries.push(deductionEntry);
+
+    const netSaved = entries
+      .filter((e) => e.status === 'saved')
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    expect(entries).toHaveLength(2);
+    expect(deductionEntry.amount).toBe(-500);
+    expect(deductionEntry.entryType).toBe('deduction');
+    expect(deductionEntry.reason).toBe('Lost Money');
+    expect(netSaved).toBe(2000); // 2500 - 500 = 2000
+  });
+
+  it('validates deduction constraints: prevents deducting more than current saved balance', () => {
+    const currentSaved = 1500;
+
+    const validateDeduction = (amountStr: string, availableSaved: number) => {
+      const parsed = parseInt(amountStr, 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        return { valid: false, error: 'Enter a valid amount greater than 0' };
+      }
+      if (availableSaved <= 0) {
+        return { valid: false, error: 'Current saved balance is zero' };
+      }
+      if (parsed > availableSaved) {
+        return { valid: false, error: `Cannot deduct more than saved balance (${availableSaved})` };
+      }
+      return { valid: true, amount: parsed };
+    };
+
+    expect(validateDeduction('0', currentSaved).valid).toBe(false);
+    expect(validateDeduction('-100', currentSaved).valid).toBe(false);
+    expect(validateDeduction('2000', currentSaved).valid).toBe(false);
+    expect(validateDeduction('500', 0).valid).toBe(false);
+    expect(validateDeduction('500', currentSaved).valid).toBe(true);
+    expect(validateDeduction('1500', currentSaved).valid).toBe(true);
+  });
+
+  it('reverts completed challenge status back to active if deduction drops total below target', () => {
+    const challenge: SavingsChallenge = {
+      id: 'ch1',
+      name: 'Holiday Trip',
+      targetAmount: 10000,
+      minimumAmount: 500,
+      maximumAmount: 2000,
+      currency: 'INR',
+      startDate: '2026-10-01',
+      frequency: 'daily',
+      generationMode: 'complete_plan',
+      status: 'completed',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+    };
+
+    let totalSaved = 10000;
+    const deduction = 1500;
+    totalSaved -= deduction; // 8500
+
+    let status = challenge.status;
+    if (status === 'completed' && totalSaved < challenge.targetAmount) {
+      status = 'active';
+    }
+
+    expect(totalSaved).toBe(8500);
+    expect(status).toBe('active');
+  });
+
+  it('deleting / reverting a deduction transaction restores the original savings balance', () => {
+    let entries: SavingsEntry[] = [
+      {
+        id: 'entry_1',
+        challengeId: 'ch1',
+        sequenceNumber: 1,
+        plannedDate: '2026-10-09',
+        amount: 3000,
+        status: 'saved',
+        completedAt: '2026-10-09T10:00:00Z',
+        createdAt: '2026-10-09T10:00:00Z',
+        updatedAt: '2026-10-09T10:00:00Z',
+      },
+      {
+        id: 'entry_deduct_1',
+        challengeId: 'ch1',
+        sequenceNumber: 2,
+        plannedDate: '2026-10-09',
+        amount: -800,
+        status: 'saved',
+        completedAt: '2026-10-09T12:00:00Z',
+        createdAt: '2026-10-09T12:00:00Z',
+        updatedAt: '2026-10-09T12:00:00Z',
+        entryType: 'deduction',
+      },
+    ];
+
+    expect(entries.reduce((s, e) => s + e.amount, 0)).toBe(2200);
+
+    // Delete deduction
+    entries = entries.filter((e) => e.id !== 'entry_deduct_1');
+
+    expect(entries).toHaveLength(1);
+    expect(entries.reduce((s, e) => s + e.amount, 0)).toBe(3000);
+  });
 });

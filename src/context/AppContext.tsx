@@ -75,6 +75,14 @@ interface AppContextType {
     date?: string,
     note?: string
   ) => Promise<void>;
+  deductSavings: (
+    challengeId: string,
+    amount: number,
+    date?: string,
+    note?: string,
+    reason?: string
+  ) => Promise<void>;
+  deleteManualEntry: (entryId: string) => Promise<void>;
   splitAmountAcrossChallenges: (
     totalAmount: number,
     allocations: { challengeId: string; amount: number }[],
@@ -184,8 +192,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalSaved,
         progressPercentage,
         remainingAmount: Math.max(0, c.targetAmount - totalSaved),
-        totalEntries: entries.length,
-        completedEntries: entries.filter((e) => e.status === 'saved').length,
+        totalEntries: entries.filter((e) => e.entryType !== 'deduction').length,
+        completedEntries: entries.filter((e) => e.status === 'saved' && e.entryType !== 'deduction').length,
       };
     }
     setAllChallengesStats(map);
@@ -326,7 +334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? Math.min(100, Math.round((totalSaved / activeChallenge.targetAmount) * 100))
         : 0;
 
-    const completedEntries = activeChallengeEntries.filter((e) => e.status === 'saved').length;
+    const completedEntries = activeChallengeEntries.filter((e) => e.status === 'saved' && e.entryType !== 'deduction').length;
     const pendingEntries = activeChallengeEntries.filter((e) => e.status === 'pending').length;
     const missedEntries = activeChallengeEntries.filter((e) => isEntryMissed(e.plannedDate, e.status)).length;
 
@@ -533,11 +541,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [activeChallengeEntries, activeChallenge, challenges, settings, refreshAllStatsFor, addToast]
   );
 
+  // Delete manual or deduction entry
+  const deleteManualEntry = useCallback(
+    async (entryId: string) => {
+      const entry = activeChallengeEntries.find((e) => e.id === entryId);
+      if (!entry) return;
+
+      await db.deleteEntryRecord(entryId);
+
+      const updatedEntries = await db.getEntriesForChallenge(entry.challengeId);
+      if (activeChallengeId === entry.challengeId) {
+        setActiveChallengeEntries(updatedEntries);
+      }
+
+      const targetChallenge = challenges.find((c) => c.id === entry.challengeId);
+      let nextChallenges = challenges;
+      if (targetChallenge) {
+        const newTotalSaved = updatedEntries
+          .filter((e) => e.status === 'saved')
+          .reduce((sum, e) => sum + e.amount, 0);
+
+        if (targetChallenge.status === 'completed' && newTotalSaved < targetChallenge.targetAmount) {
+          const reactivated = { ...targetChallenge, status: 'active' as const, updatedAt: new Date().toISOString() };
+          await db.saveChallenge(reactivated);
+          nextChallenges = challenges.map((c) => (c.id === targetChallenge.id ? reactivated : c));
+          setChallenges(nextChallenges);
+        } else if (targetChallenge.status === 'active' && newTotalSaved >= targetChallenge.targetAmount) {
+          const completed = { ...targetChallenge, status: 'completed' as const, updatedAt: new Date().toISOString() };
+          await db.saveChallenge(completed);
+          nextChallenges = challenges.map((c) => (c.id === targetChallenge.id ? completed : c));
+          setChallenges(nextChallenges);
+        }
+      }
+
+      await refreshAllStatsFor(nextChallenges);
+      playUndoTone(settings.soundEffects);
+      addToast('Transaction removed successfully.', 'info');
+    },
+    [activeChallengeEntries, activeChallengeId, challenges, settings.soundEffects, refreshAllStatsFor, addToast]
+  );
+
   // Undo saved entry
   const undoEntrySaved = useCallback(
     async (entryId: string) => {
       const entry = activeChallengeEntries.find((e) => e.id === entryId);
-      if (!entry || entry.status === 'pending') return;
+      if (!entry) return;
+
+      if (entry.id.includes('_deduct_') || (entry.isManual && entry.id.includes('_manual_')) || entry.entryType === 'deduction') {
+        await deleteManualEntry(entryId);
+        return;
+      }
+
+      if (entry.status === 'pending') return;
 
       const updatedEntry: SavingsEntry = {
         ...entry,
@@ -568,7 +623,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await refreshAllStatsFor(nextChallenges);
       addToast(`Day ${entry.sequenceNumber} completion reversed.`, 'info');
     },
-    [activeChallengeEntries, activeChallenge, challenges, settings.soundEffects, refreshAllStatsFor, addToast]
+    [activeChallengeEntries, activeChallenge, challenges, settings.soundEffects, refreshAllStatsFor, deleteManualEntry, addToast]
   );
 
   // Regenerate plan for challenge
@@ -775,6 +830,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     },
     [challenges, activeChallengeId, settings, refreshAllStatsFor, addToast]
+  );
+
+  // ---------------- DEDUCT SAVINGS (LOSS / WITHDRAWAL) ---------------- //
+  const deductSavings = useCallback(
+    async (
+      challengeId: string,
+      amount: number,
+      date?: string,
+      note?: string,
+      reason?: string
+    ) => {
+      const positiveAmount = Math.abs(amount);
+      if (positiveAmount <= 0) return;
+
+      const targetChallenge = challenges.find((c) => c.id === challengeId);
+      if (!targetChallenge) return;
+
+      const entries = await db.getEntriesForChallenge(challengeId);
+      const currentSaved = entries
+        .filter((e) => e.status === 'saved')
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      if (currentSaved <= 0) {
+        addToast(`Cannot deduct money: "${targetChallenge.name}" has 0 savings recorded.`, 'error');
+        throw new Error('Current saved balance is zero.');
+      }
+
+      if (positiveAmount > currentSaved) {
+        addToast(
+          `Cannot deduct ${formatCurrency(positiveAmount, targetChallenge.currency)}: Maximum available to deduct is ${formatCurrency(currentSaved, targetChallenge.currency)}.`,
+          'error'
+        );
+        throw new Error('Deduction amount exceeds currently saved balance.');
+      }
+
+      const nowIso = new Date().toISOString();
+      const plannedDate = date || getTodayDateString();
+      const nextSeq = entries.length + 1;
+
+      const deductionEntry: SavingsEntry = {
+        id: `entry_${challengeId}_deduct_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        challengeId,
+        sequenceNumber: nextSeq,
+        plannedDate,
+        amount: -positiveAmount,
+        status: 'saved',
+        completedAt: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        note: note ? note.trim() : (reason || 'Lost Money / Deduction'),
+        isManual: true,
+        entryType: 'deduction',
+        reason: reason || 'Loss',
+      };
+
+      await db.saveEntriesBatch([deductionEntry]);
+
+      const updatedEntries = await db.getEntriesForChallenge(challengeId);
+      const newTotalSaved = updatedEntries
+        .filter((e) => e.status === 'saved')
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      let nextChallenges = challenges;
+      if (targetChallenge.status === 'completed' && newTotalSaved < targetChallenge.targetAmount) {
+        const reactivatedCh = { ...targetChallenge, status: 'active' as const, updatedAt: nowIso };
+        await db.saveChallenge(reactivatedCh);
+        nextChallenges = challenges.map((c) => (c.id === challengeId ? reactivatedCh : c));
+        setChallenges(nextChallenges);
+        addToast(`Goal "${targetChallenge.name}" reactivated (${formatCurrency(targetChallenge.targetAmount - newTotalSaved, targetChallenge.currency)} remaining).`, 'info');
+      }
+
+      if (activeChallengeId === challengeId) {
+        setActiveChallengeEntries(updatedEntries);
+      }
+
+      await refreshAllStatsFor(nextChallenges);
+      playUndoTone(settings.soundEffects);
+      addToast(`Deducted ${formatCurrency(positiveAmount, targetChallenge.currency)} from "${targetChallenge.name}".`, 'info');
+    },
+    [challenges, activeChallengeId, settings.soundEffects, refreshAllStatsFor, addToast]
   );
 
   // ---------------- MULTI-GOAL SPLIT SAVINGS ---------------- //
@@ -996,6 +1131,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         generateNextSurpriseEntry,
         rerollSurpriseAmount,
         addManualSavings,
+        deductSavings,
+        deleteManualEntry,
         splitAmountAcrossChallenges,
         deleteSplitTransaction,
         updateSettings,

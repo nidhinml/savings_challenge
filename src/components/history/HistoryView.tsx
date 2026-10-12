@@ -9,7 +9,10 @@ import {
   ArrowRightLeft,
   Trash2,
   Calendar,
+  TrendingDown,
 } from 'lucide-react';
+import { Modal } from '../common/Modal';
+import type { SavingsEntry } from '../../types/challenge';
 
 export const HistoryView: React.FC = () => {
   const {
@@ -17,11 +20,13 @@ export const HistoryView: React.FC = () => {
     activeChallengeEntries,
     splitTransactions,
     deleteSplitTransaction,
+    deleteManualEntry,
     settings,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'entries' | 'splits'>('entries');
-  const [filter, setFilter] = useState<'all' | 'completed' | 'pending' | 'missed'>('all');
+  const [filter, setFilter] = useState<'all' | 'completed' | 'deductions' | 'pending' | 'missed'>('all');
+  const [deleteTarget, setDeleteTarget] = useState<SavingsEntry | null>(null);
 
   if (!activeChallenge) {
     return (
@@ -35,11 +40,13 @@ export const HistoryView: React.FC = () => {
 
   const entriesWithStatus = activeChallengeEntries.map((e) => ({
     ...e,
+    isDeduct: e.entryType === 'deduction' || e.amount < 0,
     isMissed: !e.status || (e.status === 'pending' && isEntryMissed(e.plannedDate, e.status)),
   }));
 
   const filtered = entriesWithStatus.filter((e) => {
-    if (filter === 'completed') return e.status === 'saved';
+    if (filter === 'completed') return e.status === 'saved' && !e.isDeduct;
+    if (filter === 'deductions') return e.isDeduct;
     if (filter === 'pending') return e.status === 'pending';
     if (filter === 'missed') return e.isMissed;
     return true;
@@ -49,7 +56,12 @@ export const HistoryView: React.FC = () => {
     .filter((e) => e.status === 'saved')
     .reduce((sum, e) => sum + e.amount, 0);
 
-  const completedCount = activeChallengeEntries.filter((e) => e.status === 'saved').length;
+  const totalDeductions = activeChallengeEntries
+    .filter((e) => e.status === 'saved' && (e.entryType === 'deduction' || e.amount < 0))
+    .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+  const completedCount = activeChallengeEntries.filter((e) => e.status === 'saved' && e.entryType !== 'deduction' && e.amount > 0).length;
+  const deductionsCount = activeChallengeEntries.filter((e) => e.entryType === 'deduction' || e.amount < 0).length;
   const missedCount = entriesWithStatus.filter((e) => e.isMissed).length;
 
   const formatCompletionDateTime = (iso: string | null) => {
@@ -111,32 +123,42 @@ export const HistoryView: React.FC = () => {
       {activeTab === 'entries' ? (
         <>
           {/* Overview Analytics Bar */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Saved So Far
+                Net Saved
               </span>
-              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
+              <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
                 {formatCurrency(totalCompletedAmount, currencyCode)}
               </span>
               <span className="text-[10px] text-slate-400">{completedCount} days checked</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Deductions / Loss
+              </span>
+              <span className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-1 block">
+                -{formatCurrency(totalDeductions, currencyCode)}
+              </span>
+              <span className="text-[10px] text-slate-400">{deductionsCount} deducted</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                 Pending Days
               </span>
-              <span className="text-lg font-black text-slate-800 dark:text-slate-200 mt-1 block">
-                {activeChallengeEntries.length - completedCount}
+              <span className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-200 mt-1 block">
+                {activeChallengeEntries.filter((e) => e.status === 'pending').length}
               </span>
               <span className="text-[10px] text-slate-400">entries to go</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm text-center">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                 Missed Days
               </span>
-              <span className="text-lg font-black text-rose-600 dark:text-rose-400 mt-1 block">
+              <span className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 mt-1 block">
                 {missedCount}
               </span>
               <span className="text-[10px] text-slate-400">catch up anytime</span>
@@ -144,18 +166,26 @@ export const HistoryView: React.FC = () => {
           </div>
 
           {/* Filter Sub-Tabs */}
-          <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-            {(['all', 'completed', 'pending', 'missed'] as const).map((tab) => (
+          <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 overflow-x-auto">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'completed', label: 'Saved' },
+                { id: 'deductions', label: 'Deductions' },
+                { id: 'pending', label: 'Pending' },
+                { id: 'missed', label: 'Missed' },
+              ] as const
+            ).map((tab) => (
               <button
-                key={tab}
-                onClick={() => setFilter(tab)}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
-                  filter === tab
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className={`flex-1 min-w-[70px] py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  filter === tab.id
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -169,6 +199,7 @@ export const HistoryView: React.FC = () => {
               </div>
             ) : (
               filtered.map((entry) => {
+                const isDeduct = entry.isDeduct;
                 const isSaved = entry.status === 'saved';
                 const timestampFormatted = formatCompletionDateTime(entry.completedAt);
 
@@ -176,7 +207,9 @@ export const HistoryView: React.FC = () => {
                   <div
                     key={entry.id}
                     className={`p-4 rounded-2xl border transition-all ${
-                      isSaved
+                      isDeduct
+                        ? 'bg-white dark:bg-slate-900 border-rose-200/80 dark:border-rose-900/50 shadow-sm'
+                        : isSaved
                         ? 'bg-white dark:bg-slate-900 border-emerald-200/80 dark:border-emerald-900/50 shadow-sm'
                         : entry.isMissed
                         ? 'bg-white dark:bg-slate-900 border-rose-200 dark:border-rose-900/50 shadow-sm'
@@ -187,51 +220,92 @@ export const HistoryView: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isSaved
+                            isDeduct
+                              ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                              : isSaved
                               ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                               : entry.isMissed
                               ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          {isSaved ? <Check className="w-5 h-5 stroke-[2.5]" /> : <Clock className="w-4 h-4" />}
+                          {isDeduct ? (
+                            <TrendingDown className="w-5 h-5 stroke-[2.5]" />
+                          ) : isSaved ? (
+                            <Check className="w-5 h-5 stroke-[2.5]" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
                         </div>
 
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-extrabold text-sm text-slate-900 dark:text-white">
-                              Day {String(entry.sequenceNumber).padStart(2, '0')}
+                              {isDeduct
+                                ? 'Deduction'
+                                : `Day ${String(entry.sequenceNumber).padStart(2, '0')}`}
                             </span>
                             <span className="text-xs text-slate-400">
-                              • Planned: {entry.plannedDate}
+                              • {entry.plannedDate}
                             </span>
                           </div>
-                          <div className="text-base font-extrabold text-slate-900 dark:text-white mt-0.5">
-                            {formatCurrency(entry.amount, currencyCode)}
+                          <div
+                            className={`text-base font-extrabold mt-0.5 ${
+                              isDeduct
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {isDeduct
+                              ? `-${formatCurrency(Math.abs(entry.amount), currencyCode)}`
+                              : formatCurrency(entry.amount, currencyCode)}
                           </div>
+                          {entry.note && (
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {entry.note}
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        {isSaved ? (
-                          <div>
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                              Saved
+                      <div className="flex items-center gap-2 text-right">
+                        <div>
+                          {isDeduct ? (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
+                              Loss / Deducted
                             </span>
-                            {timestampFormatted && (
-                              <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                                {timestampFormatted}
+                          ) : isSaved ? (
+                            <div>
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                Saved
                               </span>
-                            )}
-                          </div>
-                        ) : entry.isMissed ? (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
-                            Missed Day
-                          </span>
-                        ) : (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                            Pending
-                          </span>
+                              {timestampFormatted && (
+                                <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                                  {timestampFormatted}
+                                </span>
+                              )}
+                            </div>
+                          ) : entry.isMissed ? (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
+                              Missed Day
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              Pending
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Delete manual entry / deduction button */}
+                        {(entry.isManual || isDeduct) && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(entry)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
+                            title="Remove this transaction"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -318,6 +392,36 @@ export const HistoryView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Delete Confirmation Modal for Manual/Deduction entry */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={
+          deleteTarget?.entryType === 'deduction' || (deleteTarget?.amount || 0) < 0
+            ? 'Remove Deduction Record?'
+            : 'Remove Transaction Record?'
+        }
+        description={
+          deleteTarget?.entryType === 'deduction' || (deleteTarget?.amount || 0) < 0
+            ? `Are you sure you want to remove this deduction of ${formatCurrency(
+                Math.abs(deleteTarget?.amount || 0),
+                currencyCode
+              )}? The money will be restored back to your saved balance.`
+            : `Are you sure you want to remove this transaction record of ${formatCurrency(
+                deleteTarget?.amount || 0,
+                currencyCode
+              )}?`
+        }
+        confirmText="Yes, Remove"
+        confirmVariant="danger"
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteManualEntry(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+      />
     </div>
   );
 };

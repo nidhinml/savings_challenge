@@ -22,6 +22,7 @@ const AppContent: React.FC = () => {
   const [splitInitialAmount, setSplitInitialAmount] = useState<number | undefined>(undefined);
   const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
   const [manualGoalId, setManualGoalId] = useState<string | undefined>(undefined);
+  const [manualModalMode, setManualModalMode] = useState<'deposit' | 'deduction'>('deposit');
 
   if (isLoading) {
     return (
@@ -53,8 +54,9 @@ const AppContent: React.FC = () => {
     setIsSplitModalOpen(true);
   };
 
-  const handleOpenManual = (goalId?: string) => {
+  const handleOpenManual = (goalId?: string, mode: 'deposit' | 'deduction' = 'deposit') => {
     setManualGoalId(goalId);
+    setManualModalMode(mode);
     setIsManualModalOpen(true);
   };
 
@@ -113,11 +115,12 @@ const AppContent: React.FC = () => {
         initialAmount={splitInitialAmount}
       />
 
-      {/* Manual Deposit Modal */}
+      {/* Manual Deposit & Deduction Modal */}
       <ManualDepositModal
         isOpen={isManualModalOpen}
         onClose={() => setIsManualModalOpen(false)}
         defaultGoalId={manualGoalId}
+        initialMode={manualModalMode}
       />
 
       {/* Mobile Bottom Navigation */}

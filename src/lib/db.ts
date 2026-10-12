@@ -148,6 +148,11 @@ export async function updateEntryRecord(entry: SavingsEntry): Promise<void> {
   await db.put('entries', entry);
 }
 
+export async function deleteEntryRecord(entryId: string): Promise<void> {
+  const db = await getDatabase();
+  await db.delete('entries', entryId);
+}
+
 export async function deleteEntriesForChallenge(challengeId: string): Promise<void> {
   const db = await getDatabase();
   const tx = db.transaction('entries', 'readwrite');

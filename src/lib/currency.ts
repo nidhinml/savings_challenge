@@ -33,6 +33,9 @@ export function formatCurrency(amount: number, currencyCode: string = 'INR'): st
     }).format(amount);
   } catch {
     // Fallback if environment doesn't support the specific locale
+    if (amount < 0) {
+      return `-${currency.symbol}${Math.abs(amount).toLocaleString()}`;
+    }
     return `${currency.symbol}${amount.toLocaleString()}`;
   }
 }
@@ -50,18 +53,21 @@ export function getCurrencySymbol(currencyCode: string = 'INR'): string {
  */
 export function formatCompactCurrency(amount: number, currencyCode: string = 'INR'): string {
   const currency = SUPPORTED_CURRENCIES.find((c) => c.code === currencyCode) || SUPPORTED_CURRENCIES[0];
+  const isNeg = amount < 0;
+  const abs = Math.abs(amount);
+  const sign = isNeg ? '-' : '';
 
   if (currencyCode === 'INR') {
-    if (amount >= 10000000) {
-      return `₹${(amount / 10000000).toFixed(1).replace(/\.0$/, '')}Cr`;
+    if (abs >= 10000000) {
+      return `${sign}₹${(abs / 10000000).toFixed(1).replace(/\.0$/, '')}Cr`;
     }
-    if (amount >= 100000) {
-      return `₹${(amount / 100000).toFixed(1).replace(/\.0$/, '')}L`;
+    if (abs >= 100000) {
+      return `${sign}₹${(abs / 100000).toFixed(1).replace(/\.0$/, '')}L`;
     }
-    if (amount >= 1000) {
-      return `₹${(amount / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    if (abs >= 1000) {
+      return `${sign}₹${(abs / 1000).toFixed(1).replace(/\.0$/, '')}k`;
     }
-    return `₹${amount}`;
+    return `${sign}₹${abs}`;
   }
 
   try {

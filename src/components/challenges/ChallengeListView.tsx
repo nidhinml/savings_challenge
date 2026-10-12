@@ -19,7 +19,7 @@ interface ChallengeListViewProps {
   onOpenCreate: () => void;
   onSelectChallenge: (challenge: SavingsChallenge) => void;
   onOpenSplit?: () => void;
-  onOpenManual?: (goalId?: string) => void;
+  onOpenManual?: (goalId?: string, mode?: 'deposit' | 'deduction') => void;
 }
 
 export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
@@ -254,13 +254,20 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
                   </div>
 
                   {onOpenManual && ch.status !== 'archived' && (
-                    <div className="pt-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-2 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={() => onOpenManual(ch.id)}
+                        onClick={() => onOpenManual(ch.id, 'deposit')}
                         className="px-2.5 py-1 rounded-lg text-xs font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
                       >
-                        + Add Manual Amount
+                        + Add Saved
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenManual(ch.id, 'deduction')}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+                      >
+                        - Deduct
                       </button>
                     </div>
                   )}
