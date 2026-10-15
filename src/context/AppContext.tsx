@@ -185,7 +185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const progressPercentage =
         c.targetAmount > 0
-          ? Math.min(100, Math.round((totalSaved / c.targetAmount) * 100))
+          ? Math.max(0, Math.min(100, Math.round((totalSaved / c.targetAmount) * 100)))
           : 0;
 
       map[c.id] = {
@@ -305,7 +305,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 0);
     const totalRemaining = Math.max(0, totalTarget - totalSaved);
     const overallProgress =
-      totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+      totalTarget > 0
+        ? Math.max(0, Math.min(100, Math.round((totalSaved / totalTarget) * 100)))
+        : 0;
     const activeCount = challenges.filter((c) => c.status === 'active').length;
     const completedCount = challenges.filter((c) => c.status === 'completed').length;
 
@@ -331,7 +333,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const remainingAmount = Math.max(0, activeChallenge.targetAmount - totalSaved);
     const progressPercentage =
       activeChallenge.targetAmount > 0
-        ? Math.min(100, Math.round((totalSaved / activeChallenge.targetAmount) * 100))
+        ? Math.max(0, Math.min(100, Math.round((totalSaved / activeChallenge.targetAmount) * 100)))
         : 0;
 
     const completedEntries = activeChallengeEntries.filter((e) => e.status === 'saved' && e.entryType !== 'deduction').length;
@@ -848,22 +850,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!targetChallenge) return;
 
       const entries = await db.getEntriesForChallenge(challengeId);
-      const currentSaved = entries
-        .filter((e) => e.status === 'saved')
-        .reduce((sum, e) => sum + e.amount, 0);
 
-      if (currentSaved <= 0) {
-        addToast(`Cannot deduct money: "${targetChallenge.name}" has 0 savings recorded.`, 'error');
-        throw new Error('Current saved balance is zero.');
-      }
 
-      if (positiveAmount > currentSaved) {
-        addToast(
-          `Cannot deduct ${formatCurrency(positiveAmount, targetChallenge.currency)}: Maximum available to deduct is ${formatCurrency(currentSaved, targetChallenge.currency)}.`,
-          'error'
-        );
-        throw new Error('Deduction amount exceeds currently saved balance.');
-      }
+
 
       const nowIso = new Date().toISOString();
       const plannedDate = date || getTodayDateString();
@@ -907,7 +896,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await refreshAllStatsFor(nextChallenges);
       playUndoTone(settings.soundEffects);
-      addToast(`Deducted ${formatCurrency(positiveAmount, targetChallenge.currency)} from "${targetChallenge.name}".`, 'info');
+      if (newTotalSaved < 0) {
+        addToast(
+          `Deducted ${formatCurrency(positiveAmount, targetChallenge.currency)} from "${targetChallenge.name}". Balance is now ${formatCurrency(newTotalSaved, targetChallenge.currency)} (Deficit).`,
+          'info'
+        );
+      } else {
+        addToast(
+          `Deducted ${formatCurrency(positiveAmount, targetChallenge.currency)} from "${targetChallenge.name}".`,
+          'info'
+        );
+      }
     },
     [challenges, activeChallengeId, settings.soundEffects, refreshAllStatsFor, addToast]
   );

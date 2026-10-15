@@ -209,7 +209,7 @@ describe('Manual Savings Deposit & All-in-One Dashboard Calculations', () => {
     expect(netSaved).toBe(2000); // 2500 - 500 = 2000
   });
 
-  it('validates deduction constraints: prevents deducting more than current saved balance', () => {
+  it('validates deduction constraints: allows deducting more than current saved balance (deficit / negative balance)', () => {
     const currentSaved = 1500;
 
     const validateDeduction = (amountStr: string, availableSaved: number) => {
@@ -217,21 +217,33 @@ describe('Manual Savings Deposit & All-in-One Dashboard Calculations', () => {
       if (isNaN(parsed) || parsed <= 0) {
         return { valid: false, error: 'Enter a valid amount greater than 0' };
       }
-      if (availableSaved <= 0) {
-        return { valid: false, error: 'Current saved balance is zero' };
-      }
-      if (parsed > availableSaved) {
-        return { valid: false, error: `Cannot deduct more than saved balance (${availableSaved})` };
-      }
-      return { valid: true, amount: parsed };
+      return { valid: true, amount: parsed, newBalance: availableSaved - parsed };
     };
 
     expect(validateDeduction('0', currentSaved).valid).toBe(false);
     expect(validateDeduction('-100', currentSaved).valid).toBe(false);
-    expect(validateDeduction('2000', currentSaved).valid).toBe(false);
-    expect(validateDeduction('500', 0).valid).toBe(false);
+    // Deducting 2000 when 1500 saved goes to -500 deficit
+    const result2000 = validateDeduction('2000', currentSaved);
+    expect(result2000.valid).toBe(true);
+    expect(result2000.newBalance).toBe(-500);
+
+    // Deducting 500 when 0 saved goes to -500 deficit
+    const result0 = validateDeduction('500', 0);
+    expect(result0.valid).toBe(true);
+    expect(result0.newBalance).toBe(-500);
+
     expect(validateDeduction('500', currentSaved).valid).toBe(true);
     expect(validateDeduction('1500', currentSaved).valid).toBe(true);
+  });
+
+  it('allows adding and deducting when savings balance is already negative (in deficit)', () => {
+    let balance = -500;
+    // Deduct another 300
+    balance -= 300;
+    expect(balance).toBe(-800);
+    // Deposit 1000
+    balance += 1000;
+    expect(balance).toBe(200);
   });
 
   it('reverts completed challenge status back to active if deduction drops total below target', () => {

@@ -54,7 +54,7 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
           .reduce((sum, e) => sum + e.amount, 0);
         const progress =
           ch.targetAmount > 0
-            ? Math.min(100, Math.round((totalSaved / ch.targetAmount) * 100))
+            ? Math.max(0, Math.min(100, Math.round((totalSaved / ch.targetAmount) * 100)))
             : 0;
         map[ch.id] = {
           totalSaved,
@@ -237,7 +237,19 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({
                 <div className="space-y-2 mt-4">
                   <div className="flex justify-between items-baseline text-xs">
                     <span className="font-semibold text-slate-500 dark:text-slate-400">
-                      Saved: <strong className="text-slate-900 dark:text-white font-bold">{formatCurrency(stats.totalSaved, ch.currency)}</strong> of {formatCurrency(ch.targetAmount, ch.currency)}
+                      {stats.totalSaved < 0 ? (
+                        <>
+                          <span className="text-rose-500 font-bold">Deficit: </span>
+                          <strong className="text-rose-600 dark:text-rose-400 font-bold">
+                            {formatCurrency(stats.totalSaved, ch.currency)}
+                          </strong>
+                        </>
+                      ) : (
+                        <>
+                          Saved: <strong className="text-slate-900 dark:text-white font-bold">{formatCurrency(stats.totalSaved, ch.currency)}</strong>
+                        </>
+                      )}{' '}
+                      of {formatCurrency(ch.targetAmount, ch.currency)}
                     </span>
                     <span className="font-extrabold text-brand-600 dark:text-brand-400">
                       {stats.progress}%

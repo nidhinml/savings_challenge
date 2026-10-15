@@ -275,8 +275,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
 
                   <div className="flex justify-between items-baseline border-b border-slate-700/60 pb-2">
-                    <span className="text-xs font-medium text-emerald-400">Combined Saved</span>
-                    <span className="text-xl font-black text-emerald-400">
+                    <span className={`text-xs font-medium ${allGoalsSummary.totalSaved < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {allGoalsSummary.totalSaved < 0 ? 'Combined Deficit' : 'Combined Saved'}
+                    </span>
+                    <span className={`text-xl font-black ${allGoalsSummary.totalSaved < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                       {formatCurrency(allGoalsSummary.totalSaved, settings.currency)}
                     </span>
                   </div>
@@ -398,7 +400,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="space-y-1.5 mt-2">
                       <ProgressBar progress={chStat.progressPercentage} size="sm" />
                       <div className="flex justify-between items-center text-[10px] text-slate-400 pt-0.5">
-                        <span>Saved: {formatCurrency(chStat.totalSaved, ch.currency)}</span>
+                        <span className={chStat.totalSaved < 0 ? 'text-rose-500 font-semibold' : ''}>
+                          {chStat.totalSaved < 0 ? 'Deficit: ' : 'Saved: '}
+                          {formatCurrency(chStat.totalSaved, ch.currency)}
+                        </span>
                         <span>Left: {formatCurrency(chStat.remainingAmount, ch.currency)}</span>
                       </div>
                     </div>
@@ -563,10 +568,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
 
                   <div className="flex justify-between items-baseline border-b border-slate-700/60 pb-2.5">
-                    <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" /> Total Saved
+                    <span className={`text-xs font-medium flex items-center gap-1 ${
+                      stats.totalSaved < 0 ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${stats.totalSaved < 0 ? 'bg-rose-400' : 'bg-emerald-400'}`} />
+                      {stats.totalSaved < 0 ? 'Balance (Deficit)' : 'Total Saved'}
                     </span>
-                    <span className="text-lg font-black text-emerald-400 tracking-tight">
+                    <span className={`text-lg font-black tracking-tight ${
+                      stats.totalSaved < 0 ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
                       {formatCurrency(stats.totalSaved, currencyCode)}
                     </span>
                   </div>

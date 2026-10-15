@@ -122,18 +122,7 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
       return;
     }
 
-    if (mode === 'deduction') {
-      if (currentSavedBalance <= 0) {
-        setErrorMessage(`Cannot deduct funds: "${targetGoal?.name || 'Selected goal'}" has 0 savings recorded.`);
-        return;
-      }
-      if (finalAmount > currentSavedBalance) {
-        setErrorMessage(
-          `Cannot deduct ${formatCurrency(finalAmount, currencyCode)}: Maximum available saved balance is ${formatCurrency(currentSavedBalance, currencyCode)}.`
-        );
-        return;
-      }
-    }
+
 
     if (isSubmitting) return;
 
@@ -169,7 +158,7 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
       title={isDeduct ? 'Deduct / Minus Money' : 'Add Manual Savings'}
       description={
         isDeduct
-          ? 'Deduct money from your savings if you lost money, had an emergency, or withdrew funds.'
+          ? 'Deduct money from your savings if you lost money, had an emergency, or withdrew funds (deductions can exceed balance into negative/deficit).'
           : 'Record an extra or custom savings deposit toward your goal.'
       }
       hideFooter={true}
@@ -231,8 +220,9 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
               <span>Select Goal Target</span>
             </span>
             {targetGoal && (
-              <span className="text-[11px] font-semibold text-slate-400 lowercase">
-                Saved: {formatCurrency(currentSavedBalance, currencyCode)}
+              <span className={`text-[11px] font-semibold lowercase ${currentSavedBalance < 0 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>
+                {currentSavedBalance < 0 ? 'deficit: ' : 'saved: '}
+                {formatCurrency(currentSavedBalance, currencyCode)}
               </span>
             )}
           </label>
@@ -250,9 +240,10 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
               {availableGoals.map((g) => {
                 const gStat = allChallengesStats[g.id];
                 const gSaved = gStat ? gStat.totalSaved : 0;
+                const gSavedLabel = gSaved < 0 ? `Deficit: ${formatCurrency(gSaved, g.currency)}` : `Saved: ${formatCurrency(gSaved, g.currency)}`;
                 return (
                   <option key={g.id} value={g.id}>
-                    {g.name} — Saved: {formatCurrency(gSaved, g.currency)} / Target: {formatCurrency(g.targetAmount, g.currency)}
+                    {g.name} — {gSavedLabel} / Target: {formatCurrency(g.targetAmount, g.currency)}
                   </option>
                 );
               })}
@@ -266,12 +257,16 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
 
         {/* Deduction Saved Balance Callout Pill */}
         {isDeduct && (
-          <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between text-xs">
+          <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+            currentSavedBalance < 0
+              ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60'
+              : 'bg-slate-100 dark:bg-slate-800/80 border-slate-200/80 dark:border-slate-700'
+          }`}>
             <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-medium">
-              <Coins className="w-3.5 h-3.5 text-amber-500" />
-              <span>Current saved funds available:</span>
+              <Coins className={`w-3.5 h-3.5 ${currentSavedBalance < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+              <span>{currentSavedBalance < 0 ? 'Current balance (in deficit):' : 'Current saved funds available:'}</span>
             </span>
-            <span className="font-extrabold text-slate-900 dark:text-white text-sm">
+            <span className={`font-extrabold text-sm ${currentSavedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
               {formatCurrency(currentSavedBalance, currencyCode)}
             </span>
           </div>
@@ -352,22 +347,44 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
               )}
             </div>
 
-            {/* Quick Add Increments (Deposit mode only) */}
-            {!isDeduct && (
-              <div className="flex items-center gap-1.5 pt-1">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
-                  Add:
+            {/* Quick Add Increments */}
+            <div className="flex items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                {isDeduct ? 'Increase loss:' : 'Add:'}
+              </span>
+              {[50, 100, 200, 500, 1000].map((inc) => (
+                <button
+                  key={inc}
+                  type="button"
+                  onClick={() => handleAddIncrement(inc)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
+                    isDeduct
+                      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/60 hover:bg-rose-100 dark:hover:bg-rose-900/40'
+                      : 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-200/60 dark:border-brand-800/60 hover:bg-brand-100 dark:hover:bg-brand-900/40'
+                  }`}
+                >
+                  +{formatCurrency(inc, currencyCode)}
+                </button>
+              ))}
+            </div>
+
+            {/* Projected Balance Callout */}
+            {numericAmount > 0 && (
+              <div className={`mt-2 flex items-center justify-between text-xs px-3 py-2 rounded-xl border ${
+                (isDeduct ? currentSavedBalance - numericAmount : currentSavedBalance + numericAmount) < 0
+                  ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/40 text-rose-700 dark:text-rose-300'
+                  : 'bg-slate-100/70 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-300'
+              }`}>
+                <span className="font-medium">
+                  {isDeduct ? 'Balance after deduction:' : 'Balance after deposit:'}
                 </span>
-                {[50, 100, 200, 500, 1000].map((inc) => (
-                  <button
-                    key={inc}
-                    type="button"
-                    onClick={() => handleAddIncrement(inc)}
-                    className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-800/60 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
-                  >
-                    +{formatCurrency(inc, currencyCode)}
-                  </button>
-                ))}
+                <span className="font-bold">
+                  {formatCurrency(
+                    isDeduct ? currentSavedBalance - numericAmount : currentSavedBalance + numericAmount,
+                    currencyCode
+                  )}
+                  {isDeduct && currentSavedBalance - numericAmount < 0 && ' (Deficit)'}
+                </span>
               </div>
             )}
           </div>
@@ -457,8 +474,7 @@ export const ManualDepositModal: React.FC<ManualDepositModalProps> = ({
               !numericAmount ||
               numericAmount <= 0 ||
               isSubmitting ||
-              !selectedGoalId ||
-              (isDeduct && (currentSavedBalance <= 0 || numericAmount > currentSavedBalance))
+              !selectedGoalId
             }
             className={`flex-1 py-3 rounded-2xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer text-white disabled:opacity-50 ${
               isDeduct
